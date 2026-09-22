@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Crypto Quant Master V40 Pro (Bug-Fixed Engine)
-- Fixed ZeroDivisionError & Data Type Conversion Bug
-- Safe Multi-Threading Exception Handling for Streamlit
-- Dynamic Structure-Based TP/SL with Strict 50%+ OOS Win-Rate Filter
+Crypto Quant Master V40 Pro (Strict R:R 1:1.5+ & Win-Rate 50%+ Engine)
+- Dynamic Portfolio Allocation (%) for BTC, Majors, Alts, Cash
+- Intuitive Macro State & Tactical Recommendation
+- Dynamic Chart Structure TP/SL (Filtered with Min R:R 1.5 and Min Win-Rate 50%)
 """
 
 from __future__ import annotations
@@ -174,7 +174,7 @@ def fetch_dynamic_macro_regime() -> tuple[dict, pd.DataFrame, str]:
 
 
 # ============================================================
-# 2. BUG-FIXED DYNAMIC CHART WFO ENGINE
+# 2. DYNAMIC CHART ENGINE (MIN R:R 1.5 & WIN-RATE 50%+)
 # ============================================================
 def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[str, Any]]:
     try:
@@ -185,8 +185,6 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
         if not ohlcv or len(ohlcv) < 500: return None
 
         df = pd.DataFrame(ohlcv, columns=["timestamp", "Open", "High", "Low", "Close", "Volume"])
-        
-        # [오류 수정 1] 명시적 숫자 타입 변환 및 결측치 제거
         for col in ["Open", "High", "Low", "Close", "Volume"]:
             df[col] = pd.to_numeric(df[col], errors='coerce')
         df = df.dropna().reset_index(drop=True)
@@ -277,11 +275,9 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
             total += 1
 
         oos_win_rate = (wins / total * 100.0) if total > 0 else 0.0
-        
-        # [오류 수정 2] ZeroDivisionError 방지 처리
         profit_factor = (pnl_wins / pnl_losses) if pnl_losses > 0 else (2.0 if pnl_wins > 0 else 1.0)
 
-        # 🔒 요청사항 반영: 승률 50% 이상 엄격 필터링
+        # 🔒 OOS 검증: 승률 50% 이상 필수
         if oos_win_rate < 50.0 or profit_factor < 1.05:
             return None
 
@@ -302,7 +298,7 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
         else:
             return None
 
-        # 동적 손익비 계산
+        # 동적 차트 매물대 기반 TP / SL
         if pos_type == "LONG":
             sl = recent_low - (0.2 * atr)
             tp = recent_high
@@ -323,9 +319,13 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
             risk = sl - close
             reward = close - tp
 
-        rr_ratio = reward / risk if risk > 0 else 1.5
+        rr_ratio = reward / risk if risk > 0 else 1.0
 
-        if rr_ratio < 1.2: return None
+        # -----------------------------------------------------------
+        # 🔒 [요청사항 반영] 최소 손익비 1:1.5 미만 종목 스크리닝 제거
+        # -----------------------------------------------------------
+        if rr_ratio < 1.5:
+            return None
 
         return {
             "symbol": symbol, "price": close, "pos_type": pos_type,
@@ -335,7 +335,6 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
             "score": float((oos_win_rate * 0.4) + (rr_ratio * 20.0) + (profit_factor * 20.0))
         }
     except Exception:
-        # 에러 발생 시 프로그램 멈춤 없이 다음 코인으로 안되도록 예외 패스
         return None
 
 
@@ -361,7 +360,6 @@ def main():
         st.error("거래소 데이터 로드 실패. 네트워크 상태를 확인해 주세요.")
         return
 
-    # 대시보드 출력
     with st.container(border=True):
         c_head1, c_head2 = st.columns([1.5, 3])
         with c_head1:
@@ -383,18 +381,16 @@ def main():
 
     st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
-    # 4. 안전 스캔 엔진
     top_volume_market = market_df.sort_values(by="quote_volume", ascending=False).head(50)
     available_majors = [s for s in MAJOR_COINS if s in market_df["symbol"].values]
     symbols = list(set(available_majors + top_volume_market["symbol"].tolist()))
 
-    if st.button("📊 차트 매물대 기반 WFO 스캔 가동 (승률 50%+ 통과종목)", use_container_width=True, type="primary"):
+    if st.button("📊 차트 WFO 스캔 가동 (승률 50%+ & 손익비 1:1.5+ 필터)", use_container_width=True, type="primary"):
         results = []
         progress_bar = st.progress(0)
         status_text = st.empty()
         total_symbols = len(symbols)
 
-        # [오류 수정 3] 안전한 병렬 실행 처리
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
             futures = {pool.submit(analyze_symbol_1month_wfo, s, active_ex): s for s in symbols}
             completed = 0
@@ -419,13 +415,13 @@ def main():
         df_long = df_res[df_res["pos_type"] == "LONG"]
         df_short = df_res[df_res["pos_type"] == "SHORT"]
 
-        st.success(f"🎉 스캔 완료! 승률 50% 이상 조건을 통과한 정예 롱({len(df_long)}개) / 숏({len(df_short)}개) 코인입니다.")
+        st.success(f"🎉 스캔 완료! 승률 50% 이상 & 손익비 1:1.5 이상 통과 종목: 롱({len(df_long)}개) / 숏({len(df_short)}개)")
 
         tab_long, tab_short = st.tabs([f"🟢 LONG 정예 추천 ({len(df_long)}개)", f"🔴 SHORT 정예 추천 ({len(df_short)}개)"])
 
         with tab_long:
             if df_long.empty:
-                st.info("현재 승률 50% 이상 및 고손익비 조건을 동시에 충족하는 LONG 코인이 없습니다.")
+                st.info("현재 승률 50% 이상 및 손익비 1:1.5 이상 조건을 충족하는 LONG 코인이 없습니다.")
             else:
                 cols = st.columns(2)
                 for idx, (_, row) in enumerate(df_long.iterrows()):
@@ -452,7 +448,7 @@ def main():
 
         with tab_short:
             if df_short.empty:
-                st.info("현재 승률 50% 이상 및 고손익비 조건을 동시에 충족하는 SHORT 코인이 없습니다.")
+                st.info("현재 승률 50% 이상 및 손익비 1:1.5 이상 조건을 충족하는 SHORT 코인이 없습니다.")
             else:
                 cols = st.columns(2)
                 for idx, (_, row) in enumerate(df_short.iterrows()):

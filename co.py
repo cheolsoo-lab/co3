@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Crypto Quant Master V40 Pro (1-Month / 720-Candle WFO Engine)
-- 30-Day Historical Data (720 Candles of 1H timeframe)
-- Deep Walk-Forward Optimization (In-Sample: ~21 Days, Out-of-Sample: ~9 Days)
-- Strict Risk Management & 3D Macro Regime
+Crypto Quant Master V40 Pro (Ultra Intuitive UI & Portfolio Allocation Engine)
+- 직관적인 거시 상태 (상승/횡보/하락) 및 최우선 집중 자산 표기
+- 자산별 추천 비중 괄호 표기: BTC(20%), 메이저(45%), 일반알트(35%), 현금(0%)
 """
 
 from __future__ import annotations
@@ -21,7 +20,7 @@ import ta
 # 0. STREAMLIT CONFIG & LIGHT UI STYLING
 # ============================================================
 st.set_page_config(
-    page_title="🚀 Crypto Quant Master V40 Pro (1-Month Data)",
+    page_title="🚀 Crypto Quant Master V40 Pro",
     page_icon="💎",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -30,11 +29,40 @@ st.set_page_config(
 st.markdown("""
 <style>
     .stApp { background-color: #f8fafc; color: #0f172a; }
-    .macro-card {
-        background: linear-gradient(135deg, #e0f2fe 0%, #f3e8ff 100%);
-        border: 1px solid #bae6fd; padding: 22px; border-radius: 16px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-bottom: 20px;
+    
+    /* 직관적 거시평가 메인 히어로 카드 */
+    .hero-card-bull {
+        background: linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%);
+        border: 2px solid #2e7d32; border-radius: 16px; padding: 20px;
+        box-shadow: 0 4px 12px rgba(46, 125, 50, 0.08); margin-bottom: 20px;
     }
+    .hero-card-neutral {
+        background: linear-gradient(135deg, #fffde7 0%, #fff8e1 100%);
+        border: 2px solid #f57f17; border-radius: 16px; padding: 20px;
+        box-shadow: 0 4px 12px rgba(245, 127, 23, 0.08); margin-bottom: 20px;
+    }
+    .hero-card-bear {
+        background: linear-gradient(135deg, #ffebee 0%, #fbe9e7 100%);
+        border: 2px solid #c62828; border-radius: 16px; padding: 20px;
+        box-shadow: 0 4px 12px rgba(198, 40, 40, 0.08); margin-bottom: 20px;
+    }
+
+    /* 배분 비중 박스 */
+    .alloc-grid {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0;
+    }
+    .alloc-box {
+        background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 12px;
+        padding: 14px; text-align: center;
+    }
+    .alloc-box-highlight {
+        background: #ffffff; border: 2.5px solid #2563eb; border-radius: 12px;
+        padding: 14px; text-align: center; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.12);
+    }
+    .alloc-label { font-size: 13px; color: #64748b; font-weight: 700; }
+    .alloc-value { font-size: 22px; color: #0f172a; font-weight: 900; margin-top: 2px; }
+
+    /* 시그널 카드 스타일 */
     .card-agg-long {
         background-color: #ffffff; border: 2px solid #34d399; border-left: 8px solid #059669;
         padding: 18px; border-radius: 14px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 14px;
@@ -46,7 +74,6 @@ st.markdown("""
     .badge-long { background-color: #10b981; color: white; padding: 4px 10px; border-radius: 16px; font-weight: 800; font-size: 12px; }
     .badge-short { background-color: #ef4444; color: white; padding: 4px 10px; border-radius: 16px; font-weight: 800; font-size: 12px; }
     .badge-score { background-color: #6366f1; color: white; padding: 4px 10px; border-radius: 16px; font-weight: 800; font-size: 12px; }
-    .stat-pill { background: #ffffff; padding: 8px 12px; border-radius: 8px; font-weight: 700; font-size: 13px; color: #1e293b; border: 1px solid #e2e8f0; text-align: center; }
     .tpsl-box { margin-top: 10px; font-size: 13px; color: #334155; background: #f1f5f9; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; }
 </style>
 """, unsafe_allow_html=True)
@@ -56,7 +83,7 @@ MAJOR_COINS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "BNB/USDT", "ADA/
 
 
 # ============================================================
-# 1. 3D MACRO REGIME ENGINE
+# 1. INTUITIVE MACRO & ALLOCATION ENGINE
 # ============================================================
 @st.cache_resource(show_spinner=False)
 def make_exchange(exchange_id: str):
@@ -65,7 +92,7 @@ def make_exchange(exchange_id: str):
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_advanced_macro_regime() -> tuple[dict, pd.DataFrame, str]:
+def fetch_intuitive_macro_regime() -> tuple[dict, pd.DataFrame, str]:
     for ex_id in DEFAULT_EXCHANGES:
         try:
             ex = make_exchange(ex_id)
@@ -109,23 +136,41 @@ def fetch_advanced_macro_regime() -> tuple[dict, pd.DataFrame, str]:
             if advancing_ratio > 50: macro_score += 20
             if 45 <= btc_rsi <= 65: macro_score += 10
 
+            # 🎯 직관적 거시 판단 & 자산별 추천 비중 (%) 연산
             if macro_score >= 80:
-                btc_status = "🟢 강한 상승장 (LONG 전략 극대화)"
-                trade_guide = "💡 액션: 🟢 LONG 탭의 1달 데이터 검증 통과 코인에 주력하세요."
-            elif macro_score >= 50:
-                btc_status = "🟡 중립/순환매 장세 (선별적 진입)"
-                trade_guide = "💡 액션: 리스크 비중을 1% 이내로 잡고 롱/숏 중 OOS 승률 높은 것만 선택하세요."
+                trend_display = "🟢 강한 상승장"
+                card_class = "hero-card-bull"
+                focus_asset = "메이저 & 일반 알트코인"
+                btc_p, major_p, alt_p, cash_p = 20, 45, 35, 0
+                summary_action = "🚀 **수익 극대화 구간:** 비트코인 상승 이후 알트코인 순환매가 진행 중입니다. 알트 롱 포지션 비중을 최대한 확대하세요."
+            elif macro_score >= 60:
+                trend_display = "🟢 완만 상승장"
+                card_class = "hero-card-bull"
+                focus_asset = "비트코인 & 메이저 코인"
+                btc_p, major_p, alt_p, cash_p = 35, 40, 15, 10
+                summary_action = "📈 **주력 자산 집중:** 대형주 중심의 안정적 상승장입니다. BTC와 메이저 코인 위주로 포트폴리오를 구성하세요."
+            elif macro_score >= 40:
+                trend_display = "🟡 박스권 / 횡보장"
+                card_class = "hero-card-neutral"
+                focus_asset = "현금 & BTC (눌림목)"
+                btc_p, major_p, alt_p, cash_p = 30, 20, 10, 40
+                summary_action = "⚖️ **방어 및 관망:** 방향성이 불분명합니다. 현금 비중을 높이고, 승률 높은 눌림목 자리만 제한적으로 접근하세요."
             else:
-                btc_status = "🔴 약세장 (SHORT 전략 또는 현금화)"
-                trade_guide = "💡 액션: 🔴 SHORT 탭 코인을 우선 보거나 관망을 권장합니다."
+                trend_display = "🔴 약세 / 하락장"
+                card_class = "hero-card-bear"
+                focus_asset = "현금 보유 (또는 숏 대응)"
+                btc_p, major_p, alt_p, cash_p = 10, 10, 0, 80
+                summary_action = "🛡️ **자산 보호 최우선:** 시장 전체 하방 압력이 높습니다. 매수를 금지하고 현금을 관망하거나 숏(SHORT) 대응만 유효합니다."
 
             btc_row = df_market[df_market['symbol'] == "BTC/USDT"]
             btc_change = float(btc_row['change_pct'].values[0]) if not btc_row.empty else 0.0
 
             return {
-                "btc_status": btc_status, "trade_guide": trade_guide,
-                "macro_score": macro_score, "advancing_ratio": advancing_ratio,
-                "btc_change": btc_change, "market_avg_change": float(df_market['change_pct'].mean())
+                "trend_display": trend_display, "card_class": card_class,
+                "focus_asset": focus_asset, "macro_score": macro_score,
+                "btc_p": btc_p, "major_p": major_p, "alt_p": alt_p, "cash_p": cash_p,
+                "summary_action": summary_action, "advancing_ratio": advancing_ratio,
+                "btc_change": btc_change
             }, df_market, ex_id
         except Exception:
             continue
@@ -140,28 +185,22 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
         ex = make_exchange(exchange_id)
         raw_symbol = symbol if exchange_id != "binance" else (f"{symbol.replace('/','')}:USDT" if ":" not in symbol else symbol)
 
-        # 🕒 최근 1달치 (24시간 * 30일 = 720개 1시간봉) 데이터 수집
         ohlcv = ex.fetch_ohlcv(raw_symbol, timeframe="1h", limit=720)
         df = pd.DataFrame(ohlcv, columns=["timestamp", "Open", "High", "Low", "Close", "Volume"])
-        if len(df) < 500: return None  # 최소 500개 이상 확보 안 되면 탈락
+        if len(df) < 500: return None
 
-        # 24H 극단적 변동성 필터 (뇌동매매 방지)
         symbol_change_24h = float((df["Close"].iloc[-1] - df["Close"].iloc[-24]) / df["Close"].iloc[-24] * 100)
         if abs(symbol_change_24h) > 15.0: return None
 
-        # 1. WFO 7:3 분할 (In-Sample: ~21일 504캔들 / Out-of-Sample: ~9일 216캔들)
         split_idx = int(len(df) * 0.7)
         df_is = df.iloc[:split_idx].copy()
-        df_oos = df.iloc[split_idx:].copy()
 
-        # 2. Grid Search 파라미터 탐색 공간
         ema_windows = [15, 20, 30, 50]
         rsi_bounds = [(40, 65), (45, 70), (35, 60)]
 
         best_param = None
         best_is_score = -999.0
 
-        # --- STEP A: In-Sample (과거 21일) 최적 파라미터 백테스트 ---
         for ema_w in ema_windows:
             ema_series = ta.trend.EMAIndicator(df_is["Close"], window=ema_w).ema_indicator()
             rsi_series = ta.momentum.RSIIndicator(df_is["Close"], window=14).rsi()
@@ -182,7 +221,7 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
                         pnl += diff
                         trades += 1
 
-                if trades >= 10:  # 최소 10회 이상 거래 발생 조건
+                if trades >= 10:
                     score = pnl / trades
                     if score > best_is_score:
                         best_is_score = score
@@ -190,7 +229,6 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
 
         if not best_param or best_is_score <= 0: return None
 
-        # --- STEP B: Out-of-Sample (최근 9일) 전진 검증 ---
         opt_ema = best_param["ema"]
         opt_rsi_low = best_param["rsi_low"]
         opt_rsi_high = best_param["rsi_high"]
@@ -216,11 +254,9 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
         oos_win_rate = (wins / total * 100.0) if total > 0 else 0.0
         profit_factor = (pnl_wins / pnl_losses) if pnl_losses > 0 else 1.0
 
-        # 🛑 [Strict 1-Month Filter] 최근 9일 OOS 승률 53% 이상, Profit Factor 1.2 이상만 통과
         if oos_win_rate < 53.0 or profit_factor < 1.2:
             return None
 
-        # --- STEP C: 실시간 타점 포착 ---
         r_last = df.iloc[-1]
         close = float(r_last["Close"])
         atr = float(r_last["ATR14"]) if pd.notna(r_last["ATR14"]) and r_last["ATR14"] > 0 else close * 0.02
@@ -269,33 +305,62 @@ def fmt_price(x):
 # 3. STREAMLIT MAIN
 # ============================================================
 def main():
-    st.title("💎 Crypto Quant Master V40 Pro (1-Month Data)")
-    st.caption("최근 1달(720개 캔들) 데이터 기반 WFO 파라미터 정밀 검증")
+    st.title("💎 Crypto Quant Master V40 Pro")
+    st.caption("거시 시장 분석 및 실시간 자산 배분 가이드")
 
     st.sidebar.header("💰 자산 리스크 계산기")
     total_balance = st.sidebar.number_input("내 총 자산 ($)", value=1000.0, step=100.0)
     risk_pct = st.sidebar.slider("1회 매매 허용 리스크 (%)", 0.5, 3.0, 1.0)
 
-    macro_data, market_df, active_ex = fetch_advanced_macro_regime()
+    macro_data, market_df, active_ex = fetch_intuitive_macro_regime()
     if market_df.empty:
         st.error("거래소 데이터 로드 실패. 네트워크 상태를 확인해 주세요.")
         return
 
+    # 🌐 직관적 거시평가 & 자산별 비중(괄호) 표시 대시보드
     st.markdown(f"""
-    <div class="macro-card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <h3 style="margin: 0; color: #0f172a;">🌐 거시 시장 방향성 진단 (점수: {macro_data.get('macro_score', 0)}/100점)</h3>
-            <span style="background: #e0e7ff; color: #3730a3; padding: 6px 14px; border-radius: 20px; font-weight: 800;">
-                {macro_data.get('btc_status', '분석 중')}
-            </span>
+    <div class="{macro_data.get('card_class', 'hero-card-neutral')}">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <span style="font-size:13px; color:#475569; font-weight:700;">🌐 거시 분석 판단</span>
+                <h2 style="margin: 2px 0 0 0; color: #0f172a; font-size:24px;">{macro_data.get('trend_display', '-')}</h2>
+            </div>
+            <div style="text-align: right;">
+                <span style="font-size:12px; color:#64748b; font-weight:700;">🎯 집중 매수 타겟</span>
+                <div style="background:#2563eb; color:white; padding:4px 12px; border-radius:8px; font-weight:800; font-size:14px; margin-top:2px;">
+                    {macro_data.get('focus_asset', '-')}
+                </div>
+            </div>
         </div>
-        <p style="font-size: 15px; color: #1e293b; font-weight: 700; margin-bottom: 12px;">
-            {macro_data.get('trade_guide', '-')}
-        </p>
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
-            <div class="stat-pill">₿ BTC 24H: <span style="color:#0284c7;">{macro_data.get('btc_change', 0.0):+.2f}%</span></div>
-            <div class="stat-pill">📊 상승 종목 비율: <b>{macro_data.get('advancing_ratio', 0.0):.1f}%</b></div>
-            <div class="stat-pill">🏦 데이터 원천: <b>{active_ex.upper()} 선물</b></div>
+
+        <div style="margin-top: 12px; font-size:14px; color:#334155;">
+            {macro_data.get('summary_action', '-')}
+        </div>
+
+        <!-- 자산 배분 비중 Grid (괄호 표기) -->
+        <div class="alloc-grid">
+            <div class="alloc-box">
+                <div class="alloc-label">₿ 비트코인</div>
+                <div class="alloc-value">({macro_data.get('btc_p', 0)}%)</div>
+            </div>
+            <div class="alloc-box">
+                <div class="alloc-label">💎 메이저 코인</div>
+                <div class="alloc-value">({macro_data.get('major_p', 0)}%)</div>
+            </div>
+            <div class="alloc-box">
+                <div class="alloc-label">🚀 일반 알트코인</div>
+                <div class="alloc-value">({macro_data.get('alt_p', 0)}%)</div>
+            </div>
+            <div class="alloc-box">
+                <div class="alloc-label">💵 현금 (USDT)</div>
+                <div class="alloc-value" style="color:#0284c7;">({macro_data.get('cash_p', 0)}%)</div>
+            </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-around; font-size: 12px; color: #475569; font-weight: 700;">
+            <span>시장 점수: <b>{macro_data.get('macro_score', 0)}/100점</b></span> |
+            <span>₿ BTC 24H: <b>{macro_data.get('btc_change', 0.0):+.2f}%</b></span> |
+            <span>📊 상승 종목 비율: <b>{macro_data.get('advancing_ratio', 0.0):.1f}%</b></span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -316,7 +381,7 @@ def main():
             for f in concurrent.futures.as_completed(futures):
                 completed += 1
                 progress_bar.progress(completed / total_symbols)
-                status_text.text(f"🧪 1달치(720 캔들) 정밀 백테스트 & OOS 검증 중... ({completed}/{total_symbols})")
+                status_text.text(f"🧪 백테스트 및 최적 파라미터 도출 중... ({completed}/{total_symbols})")
                 r = f.result()
                 if r: results.append(r)
 
@@ -330,7 +395,7 @@ def main():
         df_long = df_res[df_res["pos_type"] == "LONG"]
         df_short = df_res[df_res["pos_type"] == "SHORT"]
 
-        st.success(f"🎉 스캔 완료! 1달간 검증을 통과한 정예 롱({len(df_long)}개) / 숏({len(df_short)}개) 코인입니다.")
+        st.success(f"🎉 스캔 완료! WFO 파라미터 검증을 통과한 정예 롱({len(df_long)}개) / 숏({len(df_short)}개) 코인입니다.")
 
         tab_long, tab_short = st.tabs([f"🟢 LONG 정예 추천 ({len(df_long)}개)", f"🔴 SHORT 정예 추천 ({len(df_short)}개)"])
 
@@ -350,10 +415,10 @@ def main():
                         <div class="card-agg-long">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                 <div><span class="badge-long">🟢 LONG</span> &nbsp; <b style="font-size: 18px; color: #0f172a;">{row['symbol']}</b></div>
-                                <span class="badge-score">최근 9일 OOS 승률: {row['oos_win_rate']:.1f}%</span>
+                                <span class="badge-score">OOS 승률: {row['oos_win_rate']:.1f}%</span>
                             </div>
                             <div class="tpsl-box">
-                                ⚙️ **1달 최적화 파라미터:** <span style="color:#2563eb; font-weight:700;">{row['opt_param']}</span><br>
+                                ⚙️ **최적 파라미터:** <span style="color:#2563eb; font-weight:700;">{row['opt_param']}</span><br>
                                 💵 현재가: <b>{fmt_price(row['price'])}</b> | 📊 Profit Factor: <b>{row['profit_factor']:.2f}</b><br>
                                 🎯 **목표가(TP):** <span style="color:#059669; font-weight:700;">{fmt_price(row['tp'])}</span> | 🛑 **손절가(SL):** <span style="color:#dc2626; font-weight:700;">{fmt_price(row['sl'])}</span><br>
                                 ⚖️ **손익비:** 1 : {row['rr_ratio']:.2f}<br>
@@ -378,10 +443,10 @@ def main():
                         <div class="card-agg-short">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                 <div><span class="badge-short">🔴 SHORT</span> &nbsp; <b style="font-size: 18px; color: #0f172a;">{row['symbol']}</b></div>
-                                <span class="badge-score">최근 9일 OOS 승률: {row['oos_win_rate']:.1f}%</span>
+                                <span class="badge-score">OOS 승률: {row['oos_win_rate']:.1f}%</span>
                             </div>
                             <div class="tpsl-box">
-                                ⚙️ **1달 최적화 파라미터:** <span style="color:#dc2626; font-weight:700;">{row['opt_param']}</span><br>
+                                ⚙️ **최적 파라미터:** <span style="color:#dc2626; font-weight:700;">{row['opt_param']}</span><br>
                                 💵 현재가: <b>{fmt_price(row['price'])}</b> | 📊 Profit Factor: <b>{row['profit_factor']:.2f}</b><br>
                                 🎯 **목표가(TP):** <span style="color:#059669; font-weight:700;">{fmt_price(row['tp'])}</span> | 🛑 **손절가(SL):** <span style="color:#dc2626; font-weight:700;">{fmt_price(row['sl'])}</span><br>
                                 ⚖️ **손익비:** 1 : {row['rr_ratio']:.2f}<br>

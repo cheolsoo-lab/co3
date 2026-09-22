@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Crypto Quant Master V40 Pro (Dynamic Asset Allocation Engine)
+Crypto Quant Master V40 Pro (Dynamic Chart-Based R:R & Strict 50%+ Win-Rate Engine)
 - Dynamic Portfolio Allocation (%) for BTC, Majors, Alts, Cash
 - Intuitive Macro State & Tactical Recommendation
-- 1-Month (720-Candle) Deep WFO Search
+- Dynamic Structure-Based TP/SL with Strict 50%+ OOS Win-Rate Filter
 """
 
 from __future__ import annotations
@@ -27,7 +27,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 메인 레이아웃 패딩 최소화 및 카드 CSS 설정
 st.markdown("""
 <style>
     .stApp { background-color: #f8fafc; color: #0f172a; }
@@ -133,7 +132,6 @@ def fetch_dynamic_macro_regime() -> tuple[dict, pd.DataFrame, str]:
             except Exception:
                 macro_score = int(np.clip(advancing_ratio + (btc_change * 3), 10, 95))
 
-            # 거시 점수 및 시장 데이터 기반 동적 포트폴리오 비중 연산
             if macro_score >= 70:
                 trend_state = "강한 상승장"
                 state_badge = "🟢 강한 상승 (BULL)"
@@ -179,7 +177,7 @@ def fetch_dynamic_macro_regime() -> tuple[dict, pd.DataFrame, str]:
 
 
 # ============================================================
-# 2. 1-MONTH WFO (720 CANDLES) DEEP ANALYSIS ENGINE
+# 2. DYNAMIC CHART STRUCTURE WFO ENGINE (STRICT 50%+ WIN-RATE)
 # ============================================================
 def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[str, Any]]:
     try:
@@ -191,45 +189,64 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
         if len(df) < 500: return None
 
         symbol_change_24h = float((df["Close"].iloc[-1] - df["Close"].iloc[-24]) / df["Close"].iloc[-24] * 100)
-        if abs(symbol_change_24h) > 20.0: return None
+        if abs(symbol_change_24h) > 25.0: return None
 
         split_idx = int(len(df) * 0.7)
         df_is = df.iloc[:split_idx].copy()
 
+        sr_windows = [24, 48, 72]
         ema_windows = [15, 20, 30, 50]
-        rsi_bounds = [(40, 65), (45, 70), (35, 60)]
+        rsi_bounds = [(35, 65), (40, 70), (30, 60)]
 
         best_param = None
         best_is_score = -999.0
 
-        for ema_w in ema_windows:
-            ema_series = ta.trend.EMAIndicator(df_is["Close"], window=ema_w).ema_indicator()
-            rsi_series = ta.momentum.RSIIndicator(df_is["Close"], window=14).rsi()
+        for sr_w in sr_windows:
+            df_is_copy = df_is.copy()
+            df_is_copy["sr_high"] = df_is_copy["High"].rolling(window=sr_w).max()
+            df_is_copy["sr_low"] = df_is_copy["Low"].rolling(window=sr_w).min()
 
-            for rsi_low, rsi_high in rsi_bounds:
-                pnl = 0.0
-                trades = 0
-                for i in range(1, len(df_is)):
-                    c_prev = df_is["Close"].iloc[i-1]
-                    c_curr = df_is["Close"].iloc[i]
-                    ema_val = ema_series.iloc[i-1]
-                    rsi_val = rsi_series.iloc[i-1]
+            for ema_w in ema_windows:
+                ema_series = ta.trend.EMAIndicator(df_is_copy["Close"], window=ema_w).ema_indicator()
+                rsi_series = ta.momentum.RSIIndicator(df_is_copy["Close"], window=14).rsi()
 
-                    if pd.isna(ema_val) or pd.isna(rsi_val): continue
+                for rsi_low, rsi_high in rsi_bounds:
+                    pnl = 0.0
+                    trades = 0
+                    for i in range(sr_w + 1, len(df_is_copy)):
+                        c_prev = df_is_copy["Close"].iloc[i-1]
+                        c_curr = df_is_copy["Close"].iloc[i]
+                        ema_val = ema_series.iloc[i-1]
+                        rsi_val = rsi_series.iloc[i-1]
+                        
+                        target_high = df_is_copy["sr_high"].iloc[i-1]
+                        target_low = df_is_copy["sr_low"].iloc[i-1]
 
-                    if c_prev >= ema_val and rsi_low <= rsi_val <= rsi_high:
-                        diff = (c_curr - c_prev) / c_prev
-                        pnl += diff
-                        trades += 1
+                        if pd.isna(ema_val) or pd.isna(rsi_val) or pd.isna(target_high) or pd.isna(target_low): continue
 
-                if trades >= 8:
-                    score = pnl / trades
-                    if score > best_is_score:
-                        best_is_score = score
-                        best_param = {"ema": ema_w, "rsi_low": rsi_low, "rsi_high": rsi_high}
+                        if c_prev >= ema_val and rsi_low <= rsi_val <= rsi_high:
+                            risk = c_prev - target_low
+                            reward = target_high - c_prev
+                            if risk > 0 and reward > 0:
+                                rr = reward / risk
+                                diff = (c_curr - c_prev) / c_prev
+                                pnl += diff * rr
+                                trades += 1
+
+                    if trades >= 6:
+                        score = pnl / trades
+                        if score > best_is_score:
+                            best_is_score = score
+                            best_param = {
+                                "sr_w": sr_w,
+                                "ema": ema_w, 
+                                "rsi_low": rsi_low, 
+                                "rsi_high": rsi_high
+                            }
 
         if not best_param or best_is_score <= 0: return None
 
+        opt_sr_w = best_param["sr_w"]
         opt_ema = best_param["ema"]
         opt_rsi_low = best_param["rsi_low"]
         opt_rsi_high = best_param["rsi_high"]
@@ -237,6 +254,8 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
         df["EMA_OPT"] = ta.trend.EMAIndicator(df["Close"], window=opt_ema).ema_indicator()
         df["RSI14"] = ta.momentum.RSIIndicator(df["Close"], window=14).rsi()
         df["ATR14"] = ta.volatility.AverageTrueRange(df["High"], df["Low"], df["Close"], window=14).average_true_range()
+        df["SR_HIGH"] = df["High"].rolling(window=opt_sr_w).max()
+        df["SR_LOW"] = df["Low"].rolling(window=opt_sr_w).min()
 
         df_oos_eval = df.iloc[split_idx:].copy()
         
@@ -255,6 +274,9 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
         oos_win_rate = (wins / total * 100.0) if total > 0 else 0.0
         profit_factor = (pnl_wins / pnl_losses) if pnl_losses > 0 else 1.0
 
+        # -----------------------------------------------------------
+        # 🔒 요청사항 반영: OOS 승률 커트라인을 50.0% 이상으로 엄격 설정
+        # -----------------------------------------------------------
         if oos_win_rate < 50.0 or profit_factor < 1.1:
             return None
 
@@ -263,6 +285,9 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
         atr = float(r_last["ATR14"]) if pd.notna(r_last["ATR14"]) and r_last["ATR14"] > 0 else close * 0.02
         rsi_val = float(r_last["RSI14"]) if pd.notna(r_last["RSI14"]) else 50.0
         ema_val = float(r_last["EMA_OPT"])
+        
+        recent_high = float(r_last["SR_HIGH"])
+        recent_low = float(r_last["SR_LOW"])
 
         pos_type = None
         if close >= ema_val and opt_rsi_low <= rsi_val <= opt_rsi_high:
@@ -272,24 +297,42 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
         else:
             return None
 
-        opt_atr_m = 2.0
-        rr_target = 1.8
-
+        # 차트 매물대 기반 동적 TP/SL 설정
         if pos_type == "LONG":
-            sl = close - (opt_atr_m * atr)
-            tp = close + (opt_atr_m * rr_target * atr)
-        else:
-            sl = close + (opt_atr_m * atr)
-            tp = close - (opt_atr_m * rr_target * atr)
+            sl = recent_low - (0.2 * atr)
+            tp = recent_high
+            
+            if tp <= close:
+                tp = close + (2.5 * atr)
+            if sl >= close:
+                sl = close - (1.0 * atr)
 
-        rr_ratio = abs(tp - close) / abs(close - sl) if abs(close - sl) > 0 else 1.5
+            risk = close - sl
+            reward = tp - close
+            
+        else: # SHORT
+            sl = recent_high + (0.2 * atr)
+            tp = recent_low
+            
+            if tp >= close:
+                tp = close - (2.5 * atr)
+            if sl <= close:
+                sl = close + (1.0 * atr)
+
+            risk = sl - close
+            reward = close - tp
+
+        rr_ratio = reward / risk if risk > 0 else 1.5
+
+        if rr_ratio < 1.2:
+            return None
 
         return {
             "symbol": symbol, "price": close, "pos_type": pos_type,
-            "tp": float(tp), "sl": float(sl), "rr_ratio": rr_ratio,
-            "opt_param": f"EMA({opt_ema}) / RSI({opt_rsi_low}~{opt_rsi_high})",
+            "tp": float(tp), "sl": float(sl), "rr_ratio": float(rr_ratio),
+            "opt_param": f"EMA({opt_ema}) / 차트매물대({opt_sr_w}h)",
             "oos_win_rate": oos_win_rate, "profit_factor": profit_factor,
-            "score": float((oos_win_rate * 0.5) + (profit_factor * 20.0))
+            "score": float((oos_win_rate * 0.4) + (rr_ratio * 20.0) + (profit_factor * 20.0))
         }
     except Exception:
         return None
@@ -321,7 +364,6 @@ def main():
     # 🌐 한눈에 보는 컴팩트 거시 분석 대시보드
     # --------------------------------------------------------
     with st.container(border=True):
-        # Header Row: 장세 상태 & 가이드
         c_head1, c_head2 = st.columns([1.5, 3])
         with c_head1:
             st.markdown(f"### {macro_data.get('state_badge')}")
@@ -331,7 +373,6 @@ def main():
 
         st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
 
-        # Main Metrics Row: 자산 배분율(4개) + 핵심 시황 지표(3개)
         m1, m2, m3, m4, m5, m6, m7 = st.columns([1, 1, 1, 1, 1.1, 1.1, 1.1])
         
         m1.metric("₿ 비트코인", f"{macro_data.get('btc_pct', 0)}%")
@@ -352,7 +393,7 @@ def main():
     available_majors = [s for s in MAJOR_COINS if s in market_df["symbol"].values]
     symbols = list(set(available_majors + top_volume_market["symbol"].tolist()))
 
-    if st.button("📊 최근 1달 캔들 정밀 WFO 스캔 가동", use_container_width=True, type="primary"):
+    if st.button("📊 차트 매물대 기반 WFO 스캔 가동 (승률 50%+ 통과종목)", use_container_width=True, type="primary"):
         results = []
         progress_bar = st.progress(0)
         status_text = st.empty()
@@ -364,7 +405,7 @@ def main():
             for f in concurrent.futures.as_completed(futures):
                 completed += 1
                 progress_bar.progress(completed / total_symbols)
-                status_text.text(f"🧪 1달치(720 캔들) 정밀 백테스트 & OOS 검증 중... ({completed}/{total_symbols})")
+                status_text.text(f"🧪 승률 50%+ & 차트 고손익비 WFO 검증 중... ({completed}/{total_symbols})")
                 r = f.result()
                 if r: results.append(r)
 
@@ -378,13 +419,13 @@ def main():
         df_long = df_res[df_res["pos_type"] == "LONG"]
         df_short = df_res[df_res["pos_type"] == "SHORT"]
 
-        st.success(f"🎉 스캔 완료! WFO 파라미터 검증을 통과한 정예 롱({len(df_long)}개) / 숏({len(df_short)}개) 코인입니다.")
+        st.success(f"🎉 스캔 완료! 승률 50% 이상 조건을 통과한 정예 롱({len(df_long)}개) / 숏({len(df_short)}개) 코인입니다.")
 
         tab_long, tab_short = st.tabs([f"🟢 LONG 정예 추천 ({len(df_long)}개)", f"🔴 SHORT 정예 추천 ({len(df_short)}개)"])
 
         with tab_long:
             if df_long.empty:
-                st.info("현재 1달간의 WFO 최적화 조건을 통과한 LONG 코인이 없습니다.")
+                st.info("현재 승률 50% 이상 조건을 통과한 LONG 코인이 없습니다.")
             else:
                 cols = st.columns(2)
                 for idx, (_, row) in enumerate(df_long.iterrows()):
@@ -393,24 +434,26 @@ def main():
                     risk_usdt = total_balance * (risk_pct / 100.0)
                     pos_usdt = risk_usdt / sl_pct if sl_pct > 0 else 0
 
+                    rr_color = "#059669" if row['rr_ratio'] >= 2.0 else "#2563eb"
+
                     with col:
                         st.markdown(f"""
                         <div class="card-agg-long">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                 <div><span class="badge-long">🟢 LONG</span> &nbsp; <b style="font-size: 16px; color: #0f172a;">{row['symbol']}</b></div>
-                                <span class="badge-score">최근 OOS 승률: {row['oos_win_rate']:.1f}%</span>
+                                <span class="badge-score">OOS 승률: {row['oos_win_rate']:.1f}%</span>
                             </div>
                             <div class="tpsl-box">
-                                ⚙️ <b>1달 최적화:</b> <span style="color:#2563eb; font-weight:700;">{row['opt_param']}</span> | 📊 PF: <b>{row['profit_factor']:.2f}</b><br>
-                                💵 현재가: <b>{fmt_price(row['price'])}</b> | 🎯 TP: <span style="color:#059669; font-weight:700;">{fmt_price(row['tp'])}</span> | 🛑 SL: <span style="color:#dc2626; font-weight:700;">{fmt_price(row['sl'])}</span><br>
-                                ⚖️ 손익비: 1 : {row['rr_ratio']:.2f} | 💰 권장 진입: <span style="color:#2563eb; font-weight:700;">${pos_usdt:,.1f} USDT</span>
+                                ⚙️ <b>차트 구조:</b> <span style="color:#2563eb; font-weight:700;">{row['opt_param']}</span> | 📊 PF: <b>{row['profit_factor']:.2f}</b><br>
+                                💵 현재가: <b>{fmt_price(row['price'])}</b> | 🎯 저항선(TP): <span style="color:#059669; font-weight:700;">{fmt_price(row['tp'])}</span> | 🛑 지지선(SL): <span style="color:#dc2626; font-weight:700;">{fmt_price(row['sl'])}</span><br>
+                                ⚖️ <b>동적 손익비:</b> <span style="color:{rr_color}; font-weight:800; font-size:13px;">1 : {row['rr_ratio']:.2f}</span> | 💰 권장 진입: <span style="color:#2563eb; font-weight:700;">${pos_usdt:,.1f} USDT</span>
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
 
         with tab_short:
             if df_short.empty:
-                st.info("현재 1달간의 WFO 최적화 조건을 통과한 SHORT 코인이 없습니다.")
+                st.info("현재 승률 50% 이상 조건을 통과한 SHORT 코인이 없습니다.")
             else:
                 cols = st.columns(2)
                 for idx, (_, row) in enumerate(df_short.iterrows()):
@@ -419,17 +462,19 @@ def main():
                     risk_usdt = total_balance * (risk_pct / 100.0)
                     pos_usdt = risk_usdt / sl_pct if sl_pct > 0 else 0
 
+                    rr_color = "#dc2626" if row['rr_ratio'] >= 2.0 else "#2563eb"
+
                     with col:
                         st.markdown(f"""
                         <div class="card-agg-short">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                 <div><span class="badge-short">🔴 SHORT</span> &nbsp; <b style="font-size: 16px; color: #0f172a;">{row['symbol']}</b></div>
-                                <span class="badge-score">최근 OOS 승률: {row['oos_win_rate']:.1f}%</span>
+                                <span class="badge-score">OOS 승률: {row['oos_win_rate']:.1f}%</span>
                             </div>
                             <div class="tpsl-box">
-                                ⚙️ <b>1달 최적화:</b> <span style="color:#dc2626; font-weight:700;">{row['opt_param']}</span> | 📊 PF: <b>{row['profit_factor']:.2f}</b><br>
-                                💵 현재가: <b>{fmt_price(row['price'])}</b> | 🎯 TP: <span style="color:#059669; font-weight:700;">{fmt_price(row['tp'])}</span> | 🛑 SL: <span style="color:#dc2626; font-weight:700;">{fmt_price(row['sl'])}</span><br>
-                                ⚖️ 손익비: 1 : {row['rr_ratio']:.2f} | 💰 권장 진입: <span style="color:#2563eb; font-weight:700;">${pos_usdt:,.1f} USDT</span>
+                                ⚙️ <b>차트 구조:</b> <span style="color:#dc2626; font-weight:700;">{row['opt_param']}</span> | 📊 PF: <b>{row['profit_factor']:.2f}</b><br>
+                                💵 현재가: <b>{fmt_price(row['price'])}</b> | 🎯 지지선(TP): <span style="color:#059669; font-weight:700;">{fmt_price(row['tp'])}</span> | 🛑 저항선(SL): <span style="color:#dc2626; font-weight:700;">{fmt_price(row['sl'])}</span><br>
+                                ⚖️ <b>동적 손익비:</b> <span style="color:{rr_color}; font-weight:800; font-size:13px;">1 : {row['rr_ratio']:.2f}</span> | 💰 권장 진입: <span style="color:#2563eb; font-weight:700;">${pos_usdt:,.1f} USDT</span>
                             </div>
                         </div>
                         """, unsafe_allow_html=True)

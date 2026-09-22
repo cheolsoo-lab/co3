@@ -81,7 +81,7 @@ MAJOR_COINS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "BNB/USDT", "ADA/
 
 
 # ============================================================
-# 1. DYNAMIC ASSET ALLOCATION & MACRO ENGINE
+# 1. DYNAMIC ASSET ALLOCATION & MACRO ENGINE (오류 수정 완료)
 # ============================================================
 @st.cache_resource(show_spinner=False)
 def make_exchange(exchange_id: str):
@@ -118,39 +118,55 @@ def fetch_dynamic_macro_regime() -> tuple[dict, pd.DataFrame, str]:
 
             advancing_ratio = (df_market["change_pct"] > 0).mean() * 100.0
 
-            btc_ohlcv = ex.fetch_ohlcv("BTC/USDT", timeframe="1d", limit=100)
-            btc_df = pd.DataFrame(btc_ohlcv, columns=['ts', 'open', 'high', 'low', 'close', 'volume'])
-            btc_df['ema20'] = ta.trend.EMAIndicator(btc_df['close'], window=20).ema_indicator()
-            btc_df['ema50'] = ta.trend.EMAIndicator(btc_df['close'], window=50).ema_indicator()
-            btc_df['rsi'] = ta.momentum.RSIIndicator(btc_df['close'], window=14).rsi()
-
-            curr_price = btc_df['close'].iloc[-1]
-            ema20, ema50 = btc_df['ema20'].iloc[-1], btc_df['ema50'].iloc[-1]
-            btc_rsi = btc_df['rsi'].iloc[-1]
-
+            # 🛠️ 예외 처리 강화를 통한 거시 점수 산출 로직
             macro_score = 0
-            if curr_price > ema20: macro_score += 35
-            if ema20 > ema50: macro_score += 35
-            if advancing_ratio > 50: macro_score += 20
-            if 45 <= btc_rsi <= 65: macro_score += 10
+            btc_change = 0.0
+
+            btc_row = df_market[df_market['symbol'] == "BTC/USDT"]
+            if not btc_row.empty:
+                btc_change = float(btc_row['change_pct'].values[0])
+
+            try:
+                btc_symbol = "BTC/USDT" if "BTC/USDT" in ex.markets else "BTC/USDT:USDT"
+                btc_ohlcv = ex.fetch_ohlcv(btc_symbol, timeframe="1d", limit=100)
+                if len(btc_ohlcv) >= 50:
+                    btc_df = pd.DataFrame(btc_ohlcv, columns=['ts', 'open', 'high', 'low', 'close', 'volume'])
+                    btc_df['ema20'] = ta.trend.EMAIndicator(btc_df['close'], window=20).ema_indicator()
+                    btc_df['ema50'] = ta.trend.EMAIndicator(btc_df['close'], window=50).ema_indicator()
+                    btc_df['rsi'] = ta.momentum.RSIIndicator(btc_df['close'], window=14).rsi()
+
+                    curr_price = btc_df['close'].iloc[-1]
+                    ema20, ema50 = btc_df['ema20'].iloc[-1], btc_df['ema50'].iloc[-1]
+                    btc_rsi = btc_df['rsi'].iloc[-1]
+
+                    if curr_price > ema20: macro_score += 35
+                    if ema20 > ema50: macro_score += 35
+                    if advancing_ratio > 50: macro_score += 20
+                    if 45 <= btc_rsi <= 65: macro_score += 10
+                else:
+                    # 데이터 부족 시 상승 비율 대체 로직
+                    macro_score = int(advancing_ratio)
+            except Exception:
+                # BTC 캔들 조회 실패 시 시장 상승 종목 비율 및 24시간 변동률 기반 점수 계산
+                macro_score = int(np.clip(advancing_ratio + (btc_change * 3), 10, 95))
 
             # 🎯 거시 점수 및 시장 데이터 기반 동적 포트폴리오 비중 연산
-            if macro_score >= 80:
-                trend_state = "상승"
+            if macro_score >= 70:
+                trend_state = "강한 상승"
                 card_class = "macro-hero-bull"
                 state_badge = "🟢 강한 상승장 (BULL)"
                 top_target = "💎 메이저 & 🚀 일반 알트코인"
                 btc_pct, major_pct, alt_pct, cash_pct = 20, 45, 35, 0
                 action_guide = "💡 **최대 수익 전략:** 비트코인의 독주 이후 메이저 및 일반 알트코인으로의 자금 대이동이 진행되는 구간입니다. 알트코인 롱(LONG) 포지션 비중을 최대한 확대하세요."
-            elif macro_score >= 60:
-                trend_state = "상승"
+            elif macro_score >= 50:
+                trend_state = "완만한 상승"
                 card_class = "macro-hero-bull"
                 state_badge = "🟢 완만한 상승장 (BULL)"
                 top_target = "₿ 비트코인 & 💎 메이저 코인"
                 btc_pct, major_pct, alt_pct, cash_pct = 35, 40, 15, 10
                 action_guide = "💡 **주력 자산 집중 전략:** 상승 초기/중기 단계로 변동성이 적고 시총이 큰 비트코인과 메이저 코인 중심으로 자금을 집중하는 것이 유리합니다."
-            elif macro_score >= 40:
-                trend_state = "횡보"
+            elif macro_score >= 35:
+                trend_state = "박스권 횡보"
                 card_class = "macro-hero-neutral"
                 state_badge = "🟡 박스권/횡보장 (NEUTRAL)"
                 top_target = "💵 현금 & ₿ 비트코인 (눌림목)"
@@ -164,9 +180,6 @@ def fetch_dynamic_macro_regime() -> tuple[dict, pd.DataFrame, str]:
                 btc_pct, major_pct, alt_pct, cash_pct = 10, 10, 0, 80
                 action_guide = "💡 **자산 방어 전략:** 전체 코인 시장의 하방 압력이 큽니다. 매수(LONG)를 자제하고 현금을 80% 이상 확보하거나 검증된 코인의 숏(SHORT) 타점만 짧게 노리세요."
 
-            btc_row = df_market[df_market['symbol'] == "BTC/USDT"]
-            btc_change = float(btc_row['change_pct'].values[0]) if not btc_row.empty else 0.0
-
             return {
                 "trend_state": trend_state, "card_class": card_class, "state_badge": state_badge,
                 "macro_score": macro_score, "top_target": top_target,
@@ -176,7 +189,15 @@ def fetch_dynamic_macro_regime() -> tuple[dict, pd.DataFrame, str]:
             }, df_market, ex_id
         except Exception:
             continue
-    return {}, pd.DataFrame(), ""
+
+    # 모든 거래소 실패 시 기본 더미 보장 데이터 반환
+    return {
+        "trend_state": "분석 중", "card_class": "macro-hero-neutral", "state_badge": "🟡 데이터 동기화 중",
+        "macro_score": 50, "top_target": "₿ 비트코인 & 💵 현금",
+        "btc_pct": 30, "major_pct": 20, "alt_pct": 10, "cash_pct": 40,
+        "action_guide": "💡 시황 데이터를 연결 중입니다. 네트워크를 확인해 주세요.",
+        "advancing_ratio": 50.0, "btc_change": 0.0, "market_avg_change": 0.0
+    }, pd.DataFrame(), ""
 
 
 # ============================================================
@@ -192,7 +213,7 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
         if len(df) < 500: return None
 
         symbol_change_24h = float((df["Close"].iloc[-1] - df["Close"].iloc[-24]) / df["Close"].iloc[-24] * 100)
-        if abs(symbol_change_24h) > 15.0: return None
+        if abs(symbol_change_24h) > 20.0: return None
 
         split_idx = int(len(df) * 0.7)
         df_is = df.iloc[:split_idx].copy()
@@ -223,7 +244,7 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
                         pnl += diff
                         trades += 1
 
-                if trades >= 10:
+                if trades >= 8:
                     score = pnl / trades
                     if score > best_is_score:
                         best_is_score = score
@@ -256,7 +277,7 @@ def analyze_symbol_1month_wfo(symbol: str, exchange_id: str) -> Optional[Dict[st
         oos_win_rate = (wins / total * 100.0) if total > 0 else 0.0
         profit_factor = (pnl_wins / pnl_losses) if pnl_losses > 0 else 1.0
 
-        if oos_win_rate < 53.0 or profit_factor < 1.2:
+        if oos_win_rate < 50.0 or profit_factor < 1.1:
             return None
 
         r_last = df.iloc[-1]
@@ -363,7 +384,7 @@ def main():
         </div>
 
         <div style="display: flex; justify-content: space-around; font-size: 12px; color: #475569; font-weight: 700;">
-            <span>시장 종합 점수: <b>{macro_data.get('macro_score', 0)}/100점</b></span> |
+            <span>시장 종합 점수: <b>{macro_data.get('macro_score', 0)} / 100점</b></span> |
             <span>₿ BTC 24H: <b>{macro_data.get('btc_change', 0.0):+.2f}%</b></span> |
             <span>📊 전체 상승 종목 비율: <b>{macro_data.get('advancing_ratio', 0.0):.1f}%</b></span>
         </div>
@@ -420,7 +441,7 @@ def main():
                         <div class="card-agg-long">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                 <div><span class="badge-long">🟢 LONG</span> &nbsp; <b style="font-size: 18px; color: #0f172a;">{row['symbol']}</b></div>
-                                <span class="badge-score">최근 9일 OOS 승률: {row['oos_win_rate']:.1f}%</span>
+                                <span class="badge-score">최근 OOS 승률: {row['oos_win_rate']:.1f}%</span>
                             </div>
                             <div class="tpsl-box">
                                 ⚙️ **1달 최적화 파라미터:** <span style="color:#2563eb; font-weight:700;">{row['opt_param']}</span><br>
@@ -448,7 +469,7 @@ def main():
                         <div class="card-agg-short">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                 <div><span class="badge-short">🔴 SHORT</span> &nbsp; <b style="font-size: 18px; color: #0f172a;">{row['symbol']}</b></div>
-                                <span class="badge-score">최근 9일 OOS 승률: {row['oos_win_rate']:.1f}%</span>
+                                <span class="badge-score">최근 OOS 승률: {row['oos_win_rate']:.1f}%</span>
                             </div>
                             <div class="tpsl-box">
                                 ⚙️ **1달 최적화 파라미터:** <span style="color:#dc2626; font-weight:700;">{row['opt_param']}</span><br>

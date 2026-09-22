@@ -27,23 +27,38 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 기본 카드 스타일 정의
+# 메인 레이아웃 패딩 최소화 및 카드 CSS 설정
 st.markdown("""
 <style>
     .stApp { background-color: #f8fafc; color: #0f172a; }
     
+    /* 화면 여백 최적화 */
+    .block-container { padding-top: 1.5rem !important; padding-bottom: 2rem !important; }
+    div[data-testid="stVerticalBlock"] > div { gap: 0.6rem !important; }
+    
+    /* 메트릭 박스 여백 압축 */
+    div[data-testid="stMetric"] {
+        background-color: #ffffff;
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+    }
+    div[data-testid="stMetricLabel"] { font-size: 12px !important; color: #64748b !important; font-weight: 600; }
+    div[data-testid="stMetricValue"] { font-size: 20px !important; font-weight: 800; }
+
+    /* 추천 코인 카드 스타일 */
     .card-agg-long {
-        background-color: #ffffff; border: 2px solid #34d399; border-left: 8px solid #059669;
-        padding: 18px; border-radius: 14px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 14px;
+        background-color: #ffffff; border: 1.5px solid #34d399; border-left: 6px solid #059669;
+        padding: 14px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.03); margin-bottom: 8px;
     }
     .card-agg-short {
-        background-color: #ffffff; border: 2px solid #f87171; border-left: 8px solid #dc2626;
-        padding: 18px; border-radius: 14px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 14px;
+        background-color: #ffffff; border: 1.5px solid #f87171; border-left: 6px solid #dc2626;
+        padding: 14px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.03); margin-bottom: 8px;
     }
-    .badge-long { background-color: #10b981; color: white; padding: 4px 10px; border-radius: 16px; font-weight: 800; font-size: 12px; }
-    .badge-short { background-color: #ef4444; color: white; padding: 4px 10px; border-radius: 16px; font-weight: 800; font-size: 12px; }
-    .badge-score { background-color: #6366f1; color: white; padding: 4px 10px; border-radius: 16px; font-weight: 800; font-size: 12px; }
-    .tpsl-box { margin-top: 10px; font-size: 13px; color: #334155; background: #f1f5f9; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; }
+    .badge-long { background-color: #10b981; color: white; padding: 2px 8px; border-radius: 12px; font-weight: 700; font-size: 11px; }
+    .badge-short { background-color: #ef4444; color: white; padding: 2px 8px; border-radius: 12px; font-weight: 700; font-size: 11px; }
+    .badge-score { background-color: #6366f1; color: white; padding: 2px 8px; border-radius: 12px; font-weight: 700; font-size: 11px; }
+    .tpsl-box { margin-top: 8px; font-size: 12px; color: #334155; background: #f1f5f9; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -122,27 +137,27 @@ def fetch_dynamic_macro_regime() -> tuple[dict, pd.DataFrame, str]:
             if macro_score >= 70:
                 trend_state = "강한 상승장"
                 state_badge = "🟢 강한 상승 (BULL)"
-                top_target = "💎 메이저 & 🚀 일반 알트코인"
+                top_target = "💎 메이저 & 🚀 일반 알트"
                 btc_pct, major_pct, alt_pct, cash_pct = 20, 45, 35, 0
-                action_guide = "🚀 **수익 극대화 구간:** 비트코인 상승 이후 메이저 및 알트코인 순환매가 활발합니다. 알트코인 롱(LONG) 포지션 비중을 적극적으로 확대하세요."
+                action_guide = "🚀 **수익 극대화:** 비트코인 상승 후 순환매가 활발합니다. 알트코인 롱(LONG) 포지션 비중을 늘리세요."
             elif macro_score >= 50:
                 trend_state = "완만한 상승장"
                 state_badge = "🟢 완만 상승 (BULL)"
-                top_target = "₿ 비트코인 & 💎 메이저 코인"
+                top_target = "₿ 비트코인 & 💎 메이저"
                 btc_pct, major_pct, alt_pct, cash_pct = 35, 40, 15, 10
-                action_guide = "💡 **주력 자산 집중 구간:** 상승 초기/중기 단계입니다. 변동성이 적고 시총이 큰 비트코인과 메이저 코인 중심 운영이 안정적입니다."
+                action_guide = "💡 **주력 자산 집중:** 상승 중기 단계입니다. 변동성이 적은 비트코인 및 메이저 코인 중심으로 안정 운용하세요."
             elif macro_score >= 35:
                 trend_state = "박스권 횡보장"
                 state_badge = "🟡 박스권/횡보 (NEUTRAL)"
-                top_target = "💵 현금 & ₿ 비트코인 (눌림목)"
+                top_target = "💵 현금 & ₿ BTC 눌림목"
                 btc_pct, major_pct, alt_pct, cash_pct = 30, 20, 10, 40
-                action_guide = "⚖️ **방어 및 눌림목 관망:** 방향성이 불명확하므로 현금 비중을 40% 이상 확보하고, 승률이 높은 비트코인/메이저 눌림목 타점만 진입하세요."
+                action_guide = "⚖️ **방어 및 눌림목 관망:** 방향성이 불명확하므로 현금 비중 40% 확보 후 승률 높은 눌림목 타점만 대응하세요."
             else:
                 trend_state = "약세/하락장"
                 state_badge = "🔴 약세/하락 (BEAR)"
                 top_target = "💵 현금 보관 (USDT)"
                 btc_pct, major_pct, alt_pct, cash_pct = 10, 10, 0, 80
-                action_guide = "🛡️ **자산 방어 최우선:** 시장 전반의 하방 압력이 높습니다. 매수를 자제하고 현금을 80% 이상 확보하여 위험에 대비하세요."
+                action_guide = "🛡️ **자산 방어 최우선:** 매수를 자제하고 현금을 80% 이상 확보하여 위험에 대비하세요."
 
             return {
                 "trend_state": trend_state, "state_badge": state_badge,
@@ -292,7 +307,6 @@ def fmt_price(x):
 # ============================================================
 def main():
     st.title("💎 Crypto Quant Master V40 Pro")
-    st.caption("거시 장세 실시간 분석 기반 최적 자산 배분 & 1달 WFO 엔진")
 
     st.sidebar.header("💰 자산 리스크 계산기")
     total_balance = st.sidebar.number_input("내 총 자산 ($)", value=1000.0, step=100.0)
@@ -304,33 +318,32 @@ def main():
         return
 
     # --------------------------------------------------------
-    # 🌐 STREAMLIT 순수 UI 기반 거시 분석 패널 (HTML 코드 노출 완벽 차단)
+    # 🌐 한눈에 보는 컴팩트 거시 분석 대시보드
     # --------------------------------------------------------
     with st.container(border=True):
-        st.subheader("🌐 거시 분석 및 권장 포트폴리오 비중")
-        
-        # 메인 가이드 박스
-        st.info(f"**현재 상태:** {macro_data.get('state_badge')} | **집중 매수 타겟:** `{macro_data.get('top_target')}`\n\n{macro_data.get('action_guide')}")
-        
-        st.write("---")
-        st.markdown("##### 📊 4대 자산군 권장 배분율")
-        
-        # 4대 자산 카드
-        a1, a2, a3, a4 = st.columns(4)
-        a1.metric(label="₿ 비트코인 (BTC)", value=f"{macro_data.get('btc_pct', 0)}%", help="포트폴리오 안정성 베이스")
-        a2.metric(label="💎 메이저 코인", value=f"{macro_data.get('major_pct', 0)}%", help="ETH, SOL, XRP 등")
-        a3.metric(label="🚀 일반 알트코인", value=f"{macro_data.get('alt_pct', 0)}%", help="상승장 수익 극대화")
-        a4.metric(label="💵 현금 (USDT)", value=f"{macro_data.get('cash_pct', 0)}%", help="리스크 관리 및 대기 자금")
+        # Header Row: 장세 상태 & 가이드
+        c_head1, c_head2 = st.columns([1.5, 3])
+        with c_head1:
+            st.markdown(f"### {macro_data.get('state_badge')}")
+            st.caption(f"🎯 집중 타겟: **{macro_data.get('top_target')}**")
+        with c_head2:
+            st.info(macro_data.get('action_guide'), icon="💡")
 
-        st.write("---")
-        
-        # 시장 지표 요약
-        m1, m2, m3 = st.columns(3)
-        m1.metric("시장 종합 점수", f"{macro_data.get('macro_score', 0)} / 100 점")
-        m2.metric("₿ 비트코인 24H 변동", f"{macro_data.get('btc_change', 0.0):+.2f}%")
-        m3.metric("📊 전체 상승 종목 비율", f"{macro_data.get('advancing_ratio', 0.0):.1f}%")
+        st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
 
-    st.write("")
+        # Main Metrics Row: 자산 배분율(4개) + 핵심 시황 지표(3개)
+        m1, m2, m3, m4, m5, m6, m7 = st.columns([1, 1, 1, 1, 1.1, 1.1, 1.1])
+        
+        m1.metric("₿ 비트코인", f"{macro_data.get('btc_pct', 0)}%")
+        m2.metric("💎 메이저", f"{macro_data.get('major_pct', 0)}%")
+        m3.metric("🚀 일반알트", f"{macro_data.get('alt_pct', 0)}%")
+        m4.metric("💵 현금(USDT)", f"{macro_data.get('cash_pct', 0)}%")
+        
+        m5.metric("종합 점수", f"{macro_data.get('macro_score', 0)}점")
+        m6.metric("BTC 24H", f"{macro_data.get('btc_change', 0.0):+.2f}%")
+        m7.metric("상승 종목 비율", f"{macro_data.get('advancing_ratio', 0.0):.1f}%")
+
+    st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
     # --------------------------------------------------------
     # 4. 정밀 WFO 스캔 및 타겟 코인 노출
@@ -384,15 +397,13 @@ def main():
                         st.markdown(f"""
                         <div class="card-agg-long">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div><span class="badge-long">🟢 LONG</span> &nbsp; <b style="font-size: 18px; color: #0f172a;">{row['symbol']}</b></div>
+                                <div><span class="badge-long">🟢 LONG</span> &nbsp; <b style="font-size: 16px; color: #0f172a;">{row['symbol']}</b></div>
                                 <span class="badge-score">최근 OOS 승률: {row['oos_win_rate']:.1f}%</span>
                             </div>
                             <div class="tpsl-box">
-                                ⚙️ <b>1달 최적화 파라미터:</b> <span style="color:#2563eb; font-weight:700;">{row['opt_param']}</span><br>
-                                💵 현재가: <b>{fmt_price(row['price'])}</b> | 📊 Profit Factor: <b>{row['profit_factor']:.2f}</b><br>
-                                🎯 <b>목표가(TP):</b> <span style="color:#059669; font-weight:700;">{fmt_price(row['tp'])}</span> | 🛑 <b>손절가(SL):</b> <span style="color:#dc2626; font-weight:700;">{fmt_price(row['sl'])}</span><br>
-                                ⚖️ <b>손익비:</b> 1 : {row['rr_ratio']:.2f}<br>
-                                💰 <b>권장 진입 규모:</b> <span style="color:#2563eb; font-weight:700;">${pos_usdt:,.1f} USDT</span> (리스크: ${risk_usdt:,.1f})
+                                ⚙️ <b>1달 최적화:</b> <span style="color:#2563eb; font-weight:700;">{row['opt_param']}</span> | 📊 PF: <b>{row['profit_factor']:.2f}</b><br>
+                                💵 현재가: <b>{fmt_price(row['price'])}</b> | 🎯 TP: <span style="color:#059669; font-weight:700;">{fmt_price(row['tp'])}</span> | 🛑 SL: <span style="color:#dc2626; font-weight:700;">{fmt_price(row['sl'])}</span><br>
+                                ⚖️ 손익비: 1 : {row['rr_ratio']:.2f} | 💰 권장 진입: <span style="color:#2563eb; font-weight:700;">${pos_usdt:,.1f} USDT</span>
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
@@ -412,15 +423,13 @@ def main():
                         st.markdown(f"""
                         <div class="card-agg-short">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div><span class="badge-short">🔴 SHORT</span> &nbsp; <b style="font-size: 18px; color: #0f172a;">{row['symbol']}</b></div>
+                                <div><span class="badge-short">🔴 SHORT</span> &nbsp; <b style="font-size: 16px; color: #0f172a;">{row['symbol']}</b></div>
                                 <span class="badge-score">최근 OOS 승률: {row['oos_win_rate']:.1f}%</span>
                             </div>
                             <div class="tpsl-box">
-                                ⚙️ <b>1달 최적화 파라미터:</b> <span style="color:#dc2626; font-weight:700;">{row['opt_param']}</span><br>
-                                💵 현재가: <b>{fmt_price(row['price'])}</b> | 📊 Profit Factor: <b>{row['profit_factor']:.2f}</b><br>
-                                🎯 <b>목표가(TP):</b> <span style="color:#059669; font-weight:700;">{fmt_price(row['tp'])}</span> | 🛑 <b>손절가(SL):</b> <span style="color:#dc2626; font-weight:700;">{fmt_price(row['sl'])}</span><br>
-                                ⚖️ <b>손익비:</b> 1 : {row['rr_ratio']:.2f}<br>
-                                💰 <b>권장 진입 규모:</b> <span style="color:#2563eb; font-weight:700;">${pos_usdt:,.1f} USDT</span> (리스크: ${risk_usdt:,.1f})
+                                ⚙️ <b>1달 최적화:</b> <span style="color:#dc2626; font-weight:700;">{row['opt_param']}</span> | 📊 PF: <b>{row['profit_factor']:.2f}</b><br>
+                                💵 현재가: <b>{fmt_price(row['price'])}</b> | 🎯 TP: <span style="color:#059669; font-weight:700;">{fmt_price(row['tp'])}</span> | 🛑 SL: <span style="color:#dc2626; font-weight:700;">{fmt_price(row['sl'])}</span><br>
+                                ⚖️ 손익비: 1 : {row['rr_ratio']:.2f} | 💰 권장 진입: <span style="color:#2563eb; font-weight:700;">${pos_usdt:,.1f} USDT</span>
                             </div>
                         </div>
                         """, unsafe_allow_html=True)

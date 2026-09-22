@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Crypto Quant Master Dashboard V40 Pro (Tab-Separated Signals)
-- Clean Light Theme & 3D Macro Engine
-- Long / Short Separated View (Tab Structure)
-- Out-of-Sample (OOS) Score & Quarter-Kelly Sizing
+Crypto Quant Master Dashboard V40 Pro (Strict Filter & Intuitive Trading)
+- Strict OOS Filtering: Win Rate >= 55%, Profit Factor >= 1.3, R:R >= 1.6
+- Tab-Separated View with Intuitive Trade Setup
 """
 
 from __future__ import annotations
@@ -18,10 +17,10 @@ import streamlit as st
 import ta
 
 # ============================================================
-# 0. APP CONFIG & LIGHT UI STYLING
+# 0. APP CONFIG & LIGHT UI
 # ============================================================
 st.set_page_config(
-    page_title="🚀 Crypto Quant Master V40 Pro",
+    page_title="🚀 Crypto Quant Master V40 Pro (Strict)",
     page_icon="💎",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -110,26 +109,22 @@ def fetch_advanced_macro_regime() -> tuple[dict, pd.DataFrame, str]:
             if 45 <= btc_rsi <= 65: macro_score += 10
 
             if macro_score >= 80:
-                btc_status = "🟢 강한 상승장 (롱 관점 유리)"
-                market_phase = "세력 주도 강세장 & 시장 전반 상승"
-                max_risk = 0.02
+                btc_status = "🟢 강한 상승장 (LONG 포지션 강력 추천)"
+                trade_guide = "💡 액션: 🟢 LONG 탭의 승률 상위 코인 위주로만 매수하세요."
             elif macro_score >= 50:
                 btc_status = "🟡 중립/순환매 장세 (선별적 접근)"
-                market_phase = "박스권 안정세 & 부분 순환매 진행"
-                max_risk = 0.015
+                trade_guide = "💡 액션: 비중을 50%로 줄이고, 롱/숏 중 손익비 1:1.8 이상만 진입하세요."
             else:
-                btc_status = "🔴 약세/수축장 (숏 관점 또는 리스크 관리)"
-                market_phase = "하락 압력 우세 & 보수적 접근 권장"
-                max_risk = 0.008
+                btc_status = "🔴 약세장 (SHORT 우세 또는 관망)"
+                trade_guide = "💡 액션: 🔴 SHORT 탭 코인을 우선 보거나, 현금을 확보하세요."
 
             btc_row = df_market[df_market['symbol'] == "BTC/USDT"]
             btc_change = float(btc_row['change_pct'].values[0]) if not btc_row.empty else 0.0
 
             return {
-                "btc_status": btc_status, "market_phase": market_phase,
+                "btc_status": btc_status, "trade_guide": trade_guide,
                 "macro_score": macro_score, "advancing_ratio": advancing_ratio,
-                "max_risk_ratio": max_risk, "btc_change": btc_change,
-                "market_avg_change": float(df_market['change_pct'].mean())
+                "btc_change": btc_change, "market_avg_change": float(df_market['change_pct'].mean())
             }, df_market, ex_id
         except Exception:
             continue
@@ -137,18 +132,19 @@ def fetch_advanced_macro_regime() -> tuple[dict, pd.DataFrame, str]:
 
 
 # ============================================================
-# 2. ADAPTIVE WFO / OOS ENGINE
+# 2. STRICT WFO / OOS ENGINE (엄격한 정예 필터링)
 # ============================================================
-def analyze_symbol_wfo_adaptive(symbol: str, exchange_id: str, market_avg_change: float) -> Optional[dict]:
+def analyze_symbol_strict(symbol: str, exchange_id: str, market_avg_change: float) -> Optional[dict]:
     try:
         ex = make_exchange(exchange_id)
         raw_symbol = symbol if exchange_id != "binance" else (f"{symbol.replace('/','')}:USDT" if ":" not in symbol else symbol)
 
-        ohlcv = ex.fetch_ohlcv(raw_symbol, timeframe="1h", limit=80)
+        ohlcv = ex.fetch_ohlcv(raw_symbol, timeframe="1h", limit=100)
         df_1h = pd.DataFrame(ohlcv, columns=["timestamp", "Open", "High", "Low", "Close", "Volume"])
-        if len(df_1h) < 50: return None
+        if len(df_1h) < 60: return None
 
         df_1h["EMA20"] = ta.trend.EMAIndicator(df_1h["Close"], window=20).ema_indicator()
+        df_1h["EMA50"] = ta.trend.EMAIndicator(df_1h["Close"], window=50).ema_indicator()
         df_1h["RSI14"] = ta.momentum.RSIIndicator(df_1h["Close"], window=14).rsi()
         df_1h["ATR14"] = ta.volatility.AverageTrueRange(df_1h["High"], df_1h["Low"], df_1h["Close"], window=14).average_true_range()
 
@@ -158,28 +154,39 @@ def analyze_symbol_wfo_adaptive(symbol: str, exchange_id: str, market_avg_change
         rsi_1h = float(r_last["RSI14"]) if pd.notna(r_last["RSI14"]) else 50.0
 
         symbol_change_24h = float((close - df_1h.iloc[-24]["Close"]) / df_1h.iloc[-24]["Close"] * 100) if len(df_1h) >= 24 else 0.0
-        if abs(symbol_change_24h) > 15.0: return None
+        if abs(symbol_change_24h) > 12.0: return None  # 급등락 뇌동매매 필터
 
+        # --- 엄격해진 진입 정렬 조건 ---
         pos_type = None
-        if close >= float(r_last["EMA20"]) * 0.998 and 40 <= rsi_1h <= 70:
+        if close >= float(r_last["EMA20"]) and float(r_last["EMA20"]) >= float(r_last["EMA50"]) and 45 <= rsi_1h <= 65:
             pos_type = "LONG"
-        elif close <= float(r_last["EMA20"]) * 1.002 and 30 <= rsi_1h <= 60:
+        elif close <= float(r_last["EMA20"]) and float(r_last["EMA20"]) <= float(r_last["EMA50"]) and 35 <= rsi_1h <= 55:
             pos_type = "SHORT"
         else:
             return None
 
+        # --- OOS 7:3 백테스트 검증 ---
         split_idx = int(len(df_1h) * 0.7)
         df_oos = df_1h.iloc[split_idx:].copy()
         
-        wins, total = 0, 0
+        wins, losses = 0, 0
+        pnl_wins, pnl_losses = 0.0, 0.0
         for i in range(1, len(df_oos)):
-            if pos_type == "LONG" and df_oos["Close"].iloc[i] > df_oos["Close"].iloc[i-1]:
-                wins += 1
-            elif pos_type == "SHORT" and df_oos["Close"].iloc[i] < df_oos["Close"].iloc[i-1]:
-                wins += 1
-            total += 1
+            diff = df_oos["Close"].iloc[i] - df_oos["Close"].iloc[i-1]
+            if pos_type == "LONG":
+                if diff > 0: wins += 1; pnl_wins += diff
+                else: losses += 1; pnl_losses += abs(diff)
+            else:
+                if diff < 0: wins += 1; pnl_wins += abs(diff)
+                else: losses += 1; pnl_losses += diff
 
-        oos_win_rate = (wins / total * 100.0) if total > 0 else 50.0
+        total = wins + losses
+        oos_win_rate = (wins / total * 100.0) if total > 0 else 0.0
+        profit_factor = (pnl_wins / pnl_losses) if pnl_losses > 0 else 1.0
+
+        # 🛑 [엄격한 필터] OOS 승률 55% 이상, Profit Factor 1.25 이상만 통과!
+        if oos_win_rate < 55.0 or profit_factor < 1.25:
+            return None
 
         opt_atr_m = 2.0
         rr_target = 1.8
@@ -195,12 +202,15 @@ def analyze_symbol_wfo_adaptive(symbol: str, exchange_id: str, market_avg_change
         reward_val = abs(tp - close)
         rr_ratio = reward_val / risk_val if risk_val > 0 else 1.5
 
-        quant_score = (oos_win_rate * 0.5) + (rr_ratio * 20.0)
+        if rr_ratio < 1.6: return None  # 손익비 1:1.6 미만 탈락
+
+        quant_score = (oos_win_rate * 0.6) + (profit_factor * 20.0)
 
         return {
             "symbol": symbol, "price": close, "pos_type": pos_type,
             "tp": float(tp), "sl": float(sl), "rr_ratio": rr_ratio,
-            "oos_win_rate": oos_win_rate, "score": float(quant_score)
+            "oos_win_rate": oos_win_rate, "profit_factor": profit_factor,
+            "score": float(quant_score)
         }
     except Exception:
         return None
@@ -214,11 +224,11 @@ def fmt_price(x):
 
 
 # ============================================================
-# 3. STREAMLIT MAIN (TAB SEPARATED VIEW)
+# 3. STREAMLIT MAIN
 # ============================================================
 def main():
-    st.title("💎 Crypto Quant Master V40 Pro")
-    st.caption("롱/숏 포지션 분리 탭 적용 대시보드")
+    st.title("💎 Crypto Quant Master V40 Pro (Strict)")
+    st.caption("3D 거시 진단 & 승률 55% 이상 정예 종목만 선별")
 
     st.sidebar.header("💰 자산 리스크 계산기")
     total_balance = st.sidebar.number_input("내 총 자산 ($)", value=1000.0, step=100.0)
@@ -229,17 +239,17 @@ def main():
         st.error("거래소 데이터 로드 실패. 네트워크 상태를 확인해 주세요.")
         return
 
+    # 거시 시황 및 직관적 가이드 패널
     st.markdown(f"""
     <div class="macro-card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <h3 style="margin: 0; color: #0f172a;">🌐 거시 시장 방향성 진단</h3>
+            <h3 style="margin: 0; color: #0f172a;">🌐 거시 시장 방향성 분석 (점수: {macro_data.get('macro_score', 0)}/100점)</h3>
             <span style="background: #e0e7ff; color: #3730a3; padding: 6px 14px; border-radius: 20px; font-weight: 800;">
                 {macro_data.get('btc_status', '분석 중')}
             </span>
         </div>
-        <p style="font-size: 14px; color: #475569; margin-bottom: 12px;">
-            • 시장 진단: <b>{macro_data.get('market_phase', '-')}</b> (거시 점수: <b>{macro_data.get('macro_score', 0)}/100점</b>)<br>
-            • 권장 최대 노출 위험: <b>자산의 {macro_data.get('max_risk_ratio', 0.01)*100:.1f}% 제한</b>
+        <p style="font-size: 15px; color: #1e293b; font-weight: 700; margin-bottom: 12px;">
+            {macro_data.get('trade_guide', '-')}
         </p>
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
             <div class="stat-pill">₿ BTC 24H: <span style="color:#0284c7;">{macro_data.get('btc_change', 0.0):+.2f}%</span></div>
@@ -253,41 +263,39 @@ def main():
     available_majors = [s for s in MAJOR_COINS if s in market_df["symbol"].values]
     symbols = list(set(available_majors + top_volume_market["symbol"].tolist()))
 
-    if st.button("🔍 추천 코인 스캔 가동", use_container_width=True, type="primary"):
+    if st.button("🔍 승률 55%+ 정예 추천 코인 스캔", use_container_width=True, type="primary"):
         results = []
         progress_bar = st.progress(0)
         status_text = st.empty()
         total_symbols = len(symbols)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-            futures = {pool.submit(analyze_symbol_wfo_adaptive, s, active_ex, macro_data["market_avg_change"]): s for s in symbols}
+            futures = {pool.submit(analyze_symbol_strict, s, active_ex, macro_data["market_avg_change"]): s for s in symbols}
             completed = 0
             for f in concurrent.futures.as_completed(futures):
                 completed += 1
                 progress_bar.progress(completed / total_symbols)
-                status_text.text(f"⚡ 롱/숏 타점 스캔 중... ({completed}/{total_symbols})")
+                status_text.text(f"⚡ 엄격한 OOS 검증 진행 중... ({completed}/{total_symbols})")
                 r = f.result()
                 if r: results.append(r)
 
         progress_bar.empty()
         status_text.empty()
-        st.session_state["v40_final_results"] = results
+        st.session_state["v40_strict_results"] = results
 
-    results = st.session_state.get("v40_final_results", [])
+    results = st.session_state.get("v40_strict_results", [])
     if results:
         df_res = pd.DataFrame(results).sort_values("score", ascending=False)
         df_long = df_res[df_res["pos_type"] == "LONG"]
         df_short = df_res[df_res["pos_type"] == "SHORT"]
 
-        st.success(f"🎉 스캔 완료! 롱({len(df_long)}개) / 숏({len(df_short)}개) 포지션이 발굴되었습니다.")
+        st.success(f"🎉 스캔 완료! 엄격한 기준을 통과한 정예 롱({len(df_long)}개) / 숏({len(df_short)}개) 코인입니다.")
 
-        # 롱 / 숏 탭 구조 분리
-        tab_long, tab_short = st.tabs([f"🟢 LONG 추천 ({len(df_long)}개)", f"🔴 SHORT 추천 ({len(df_short)}개)"])
+        tab_long, tab_short = st.tabs([f"🟢 LONG 정예 추천 ({len(df_long)}개)", f"🔴 SHORT 정예 추천 ({len(df_short)}개)"])
 
-        # --- 롱 탭 ---
         with tab_long:
             if df_long.empty:
-                st.info("현재 조건에 들어맞는 LONG 추천 코인이 없습니다.")
+                st.info("현재 엄격한 승률 조건(55%↑)을 통과한 LONG 코인이 없습니다. 관망을 권장합니다.")
             else:
                 cols = st.columns(2)
                 for idx, (_, row) in enumerate(df_long.iterrows()):
@@ -304,7 +312,7 @@ def main():
                                 <span class="badge-score">OOS 승률: {row['oos_win_rate']:.1f}%</span>
                             </div>
                             <div class="tpsl-box">
-                                💵 현재가: <b>{fmt_price(row['price'])}</b><br>
+                                💵 현재가: <b>{fmt_price(row['price'])}</b> | 📊 Profit Factor: <b>{row['profit_factor']:.2f}</b><br>
                                 🎯 **목표가(TP):** <span style="color:#059669; font-weight:700;">{fmt_price(row['tp'])}</span> | 🛑 **손절가(SL):** <span style="color:#dc2626; font-weight:700;">{fmt_price(row['sl'])}</span><br>
                                 ⚖️ **손익비:** 1 : {row['rr_ratio']:.2f}<br>
                                 💰 **권장 진입 규모:** <span style="color:#2563eb; font-weight:700;">${pos_usdt:,.1f} USDT</span> (리스크: ${risk_usdt:,.1f})
@@ -312,10 +320,9 @@ def main():
                         </div>
                         """, unsafe_allow_html=True)
 
-        # --- 숏 탭 ---
         with tab_short:
             if df_short.empty:
-                st.info("현재 조건에 들어맞는 SHORT 추천 코인이 없습니다.")
+                st.info("현재 엄격한 승률 조건(55%↑)을 통과한 SHORT 코인이 없습니다. 관망을 권장합니다.")
             else:
                 cols = st.columns(2)
                 for idx, (_, row) in enumerate(df_short.iterrows()):
@@ -332,7 +339,7 @@ def main():
                                 <span class="badge-score">OOS 승률: {row['oos_win_rate']:.1f}%</span>
                             </div>
                             <div class="tpsl-box">
-                                💵 현재가: <b>{fmt_price(row['price'])}</b><br>
+                                💵 현재가: <b>{fmt_price(row['price'])}</b> | 📊 Profit Factor: <b>{row['profit_factor']:.2f}</b><br>
                                 🎯 **목표가(TP):** <span style="color:#059669; font-weight:700;">{fmt_price(row['tp'])}</span> | 🛑 **손절가(SL):** <span style="color:#dc2626; font-weight:700;">{fmt_price(row['sl'])}</span><br>
                                 ⚖️ **손익비:** 1 : {row['rr_ratio']:.2f}<br>
                                 💰 **권장 진입 규모:** <span style="color:#2563eb; font-weight:700;">${pos_usdt:,.1f} USDT</span> (리스크: ${risk_usdt:,.1f})

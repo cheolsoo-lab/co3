@@ -9,7 +9,6 @@ Crypto Quant Master V40 Pro (Dynamic Asset Allocation Engine)
 from __future__ import annotations
 
 import concurrent.futures
-import textwrap
 from typing import Optional, Dict, Any
 
 import ccxt
@@ -19,7 +18,7 @@ import streamlit as st
 import ta
 
 # ============================================================
-# 0. STREAMLIT CONFIG & LIGHT UI STYLING
+# 0. STREAMLIT CONFIG & STYLING
 # ============================================================
 st.set_page_config(
     page_title="🚀 Crypto Quant Master V40 Pro",
@@ -28,61 +27,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# 기본 카드 스타일 정의
 st.markdown("""
 <style>
     .stApp { background-color: #f8fafc; color: #0f172a; }
     
-    /* 거시평가 메인 카드 */
-    .macro-hero {
-        padding: 24px;
-        border-radius: 16px;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-    }
-    .macro-hero-bull { background: #f0fdf4; border: 2px solid #22c55e; }
-    .macro-hero-neutral { background: #fefce8; border: 2px solid #eab308; }
-    .macro-hero-bear { background: #fff1f2; border: 2px solid #f43f5e; }
-
-    .macro-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 12px;
-    }
-    .macro-title { font-size: 22px; font-weight: 800; color: #0f172a; margin: 0; }
-    .target-badge {
-        background: #2563eb; color: #ffffff; padding: 4px 12px;
-        border-radius: 8px; font-weight: 800; font-size: 14px;
-    }
-    
-    .action-text {
-        font-size: 14px; color: #334155; line-height: 1.6;
-        background: rgba(255, 255, 255, 0.8); padding: 12px 16px;
-        border-radius: 10px; margin-bottom: 16px;
-    }
-
-    /* 자산 배분 카드 스타일 */
-    .alloc-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 12px;
-        margin-bottom: 16px;
-    }
-    .alloc-card {
-        background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 12px;
-        padding: 14px; text-align: center;
-    }
-    .alloc-title { font-size: 13px; color: #64748b; font-weight: 700; margin-bottom: 4px; }
-    .alloc-value { font-size: 22px; color: #0f172a; font-weight: 900; }
-    .alloc-desc { font-size: 11px; color: #64748b; margin-top: 4px; }
-
-    .metrics-row {
-        display: flex; justify-content: space-around; font-size: 13px;
-        color: #475569; font-weight: 700; border-top: 1px solid rgba(0,0,0,0.08);
-        padding-top: 12px;
-    }
-
-    /* 추천 코인 카드 스타일 */
     .card-agg-long {
         background-color: #ffffff; border: 2px solid #34d399; border-left: 8px solid #059669;
         padding: 18px; border-radius: 14px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 14px;
@@ -169,38 +118,34 @@ def fetch_dynamic_macro_regime() -> tuple[dict, pd.DataFrame, str]:
             except Exception:
                 macro_score = int(np.clip(advancing_ratio + (btc_change * 3), 10, 95))
 
-            # 🎯 거시 점수 및 시장 데이터 기반 동적 포트폴리오 비중 연산
+            # 거시 점수 및 시장 데이터 기반 동적 포트폴리오 비중 연산
             if macro_score >= 70:
                 trend_state = "강한 상승장"
-                card_class = "macro-hero-bull"
                 state_badge = "🟢 강한 상승 (BULL)"
                 top_target = "💎 메이저 & 🚀 일반 알트코인"
                 btc_pct, major_pct, alt_pct, cash_pct = 20, 45, 35, 0
-                action_guide = "🚀 <b>수익 극대화 구간:</b> 비트코인 상승 이후 메이저 및 알트코인 순환매가 활발합니다. 알트코인 롱(LONG) 포지션 비중을 적극적으로 확대하세요."
+                action_guide = "🚀 **수익 극대화 구간:** 비트코인 상승 이후 메이저 및 알트코인 순환매가 활발합니다. 알트코인 롱(LONG) 포지션 비중을 적극적으로 확대하세요."
             elif macro_score >= 50:
                 trend_state = "완만한 상승장"
-                card_class = "macro-hero-bull"
                 state_badge = "🟢 완만 상승 (BULL)"
                 top_target = "₿ 비트코인 & 💎 메이저 코인"
                 btc_pct, major_pct, alt_pct, cash_pct = 35, 40, 15, 10
-                action_guide = "💡 <b>주력 자산 집중 구간:</b> 상승 초기/중기 단계입니다. 변동성이 적고 시총이 큰 비트코인과 메이저 코인 중심 운영이 안정적입니다."
+                action_guide = "💡 **주력 자산 집중 구간:** 상승 초기/중기 단계입니다. 변동성이 적고 시총이 큰 비트코인과 메이저 코인 중심 운영이 안정적입니다."
             elif macro_score >= 35:
                 trend_state = "박스권 횡보장"
-                card_class = "macro-hero-neutral"
                 state_badge = "🟡 박스권/횡보 (NEUTRAL)"
                 top_target = "💵 현금 & ₿ 비트코인 (눌림목)"
                 btc_pct, major_pct, alt_pct, cash_pct = 30, 20, 10, 40
-                action_guide = "⚖️ <b>방어 및 눌림목 관망:</b> 방향성이 불명확하므로 현금 비중을 40% 이상 확보하고, 승률이 높은 비트코인/메이저 눌림목 타점만 진입하세요."
+                action_guide = "⚖️ **방어 및 눌림목 관망:** 방향성이 불명확하므로 현금 비중을 40% 이상 확보하고, 승률이 높은 비트코인/메이저 눌림목 타점만 진입하세요."
             else:
                 trend_state = "약세/하락장"
-                card_class = "macro-hero-bear"
                 state_badge = "🔴 약세/하락 (BEAR)"
                 top_target = "💵 현금 보관 (USDT)"
                 btc_pct, major_pct, alt_pct, cash_pct = 10, 10, 0, 80
-                action_guide = "🛡️ <b>자산 방어 최우선:</b> 시장 전반의 하방 압력이 높습니다. 매수를 자제하고 현금을 80% 이상 확보하여 위험에 대비하세요."
+                action_guide = "🛡️ **자산 방어 최우선:** 시장 전반의 하방 압력이 높습니다. 매수를 자제하고 현금을 80% 이상 확보하여 위험에 대비하세요."
 
             return {
-                "trend_state": trend_state, "card_class": card_class, "state_badge": state_badge,
+                "trend_state": trend_state, "state_badge": state_badge,
                 "macro_score": macro_score, "top_target": top_target,
                 "btc_pct": btc_pct, "major_pct": major_pct, "alt_pct": alt_pct, "cash_pct": cash_pct,
                 "action_guide": action_guide, "advancing_ratio": advancing_ratio,
@@ -210,7 +155,7 @@ def fetch_dynamic_macro_regime() -> tuple[dict, pd.DataFrame, str]:
             continue
 
     return {
-        "trend_state": "분석 중", "card_class": "macro-hero-neutral", "state_badge": "🟡 데이터 연결 중",
+        "trend_state": "분석 중", "state_badge": "🟡 데이터 연결 중",
         "macro_score": 50, "top_target": "₿ 비트코인 & 💵 현금",
         "btc_pct": 30, "major_pct": 20, "alt_pct": 10, "cash_pct": 40,
         "action_guide": "💡 시황 데이터를 불러오는 중입니다...",
@@ -359,56 +304,33 @@ def main():
         return
 
     # --------------------------------------------------------
-    # 🌐 직관적인 거시 분석 UI 카드 (HTML 깨짐 방지 처리)
+    # 🌐 STREAMLIT 순수 UI 기반 거시 분석 패널 (HTML 코드 노출 완벽 차단)
     # --------------------------------------------------------
-    hero_card_html = textwrap.dedent(f"""
-        <div class="macro-hero {macro_data.get('card_class', 'macro-hero-neutral')}">
-            <div class="macro-header">
-                <div>
-                    <div style="font-size:12px; color:#64748b; font-weight:700;">🌐 거시 분석 종합 판단</div>
-                    <h2 class="macro-title">{macro_data.get('state_badge', '-')}</h2>
-                </div>
-                <div style="text-align:right;">
-                    <div style="font-size:12px; color:#64748b; font-weight:700;">🎯 집중 타겟 자산</div>
-                    <span class="target-badge">{macro_data.get('top_target', '-')}</span>
-                </div>
-            </div>
-            
-            <div class="action-text">
-                {macro_data.get('action_guide', '-')}
-            </div>
+    with st.container(border=True):
+        st.subheader("🌐 거시 분석 및 권장 포트폴리오 비중")
+        
+        # 메인 가이드 박스
+        st.info(f"**현재 상태:** {macro_data.get('state_badge')} | **집중 매수 타겟:** `{macro_data.get('top_target')}`\n\n{macro_data.get('action_guide')}")
+        
+        st.write("---")
+        st.markdown("##### 📊 4대 자산군 권장 배분율")
+        
+        # 4대 자산 카드
+        a1, a2, a3, a4 = st.columns(4)
+        a1.metric(label="₿ 비트코인 (BTC)", value=f"{macro_data.get('btc_pct', 0)}%", help="포트폴리오 안정성 베이스")
+        a2.metric(label="💎 메이저 코인", value=f"{macro_data.get('major_pct', 0)}%", help="ETH, SOL, XRP 등")
+        a3.metric(label="🚀 일반 알트코인", value=f"{macro_data.get('alt_pct', 0)}%", help="상승장 수익 극대화")
+        a4.metric(label="💵 현금 (USDT)", value=f"{macro_data.get('cash_pct', 0)}%", help="리스크 관리 및 대기 자금")
 
-            <div class="alloc-grid">
-                <div class="alloc-card">
-                    <div class="alloc-title">₿ 비트코인</div>
-                    <div class="alloc-value">{macro_data.get('btc_pct', 0)}%</div>
-                    <div class="alloc-desc">포트폴리오 중심</div>
-                </div>
-                <div class="alloc-card">
-                    <div class="alloc-title">💎 메이저 코인</div>
-                    <div class="alloc-value">{macro_data.get('major_pct', 0)}%</div>
-                    <div class="alloc-desc">ETH, SOL 등</div>
-                </div>
-                <div class="alloc-card">
-                    <div class="alloc-title">🚀 일반 알트코인</div>
-                    <div class="alloc-value">{macro_data.get('alt_pct', 0)}%</div>
-                    <div class="alloc-desc">수익 극대화</div>
-                </div>
-                <div class="alloc-card">
-                    <div class="alloc-title">💵 현금 (USDT)</div>
-                    <div class="alloc-value" style="color:#0284c7;">{macro_data.get('cash_pct', 0)}%</div>
-                    <div class="alloc-desc">리스크 방어</div>
-                </div>
-            </div>
+        st.write("---")
+        
+        # 시장 지표 요약
+        m1, m2, m3 = st.columns(3)
+        m1.metric("시장 종합 점수", f"{macro_data.get('macro_score', 0)} / 100 점")
+        m2.metric("₿ 비트코인 24H 변동", f"{macro_data.get('btc_change', 0.0):+.2f}%")
+        m3.metric("📊 전체 상승 종목 비율", f"{macro_data.get('advancing_ratio', 0.0):.1f}%")
 
-            <div class="metrics-row">
-                <span>시장 종합 점수: <b>{macro_data.get('macro_score', 0)} / 100점</b></span>
-                <span>₿ BTC 24H: <b>{macro_data.get('btc_change', 0.0):+.2f}%</b></span>
-                <span>📊 상승 종목 비율: <b>{macro_data.get('advancing_ratio', 0.0):.1f}%</b></span>
-            </div>
-        </div>
-    """)
-    st.markdown(hero_card_html, unsafe_allow_html=True)
+    st.write("")
 
     # --------------------------------------------------------
     # 4. 정밀 WFO 스캔 및 타겟 코인 노출
@@ -459,22 +381,21 @@ def main():
                     pos_usdt = risk_usdt / sl_pct if sl_pct > 0 else 0
 
                     with col:
-                        card_html = textwrap.dedent(f"""
-                            <div class="card-agg-long">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <div><span class="badge-long">🟢 LONG</span> &nbsp; <b style="font-size: 18px; color: #0f172a;">{row['symbol']}</b></div>
-                                    <span class="badge-score">최근 OOS 승률: {row['oos_win_rate']:.1f}%</span>
-                                </div>
-                                <div class="tpsl-box">
-                                    ⚙️ <b>1달 최적화 파라미터:</b> <span style="color:#2563eb; font-weight:700;">{row['opt_param']}</span><br>
-                                    💵 현재가: <b>{fmt_price(row['price'])}</b> | 📊 Profit Factor: <b>{row['profit_factor']:.2f}</b><br>
-                                    🎯 <b>목표가(TP):</b> <span style="color:#059669; font-weight:700;">{fmt_price(row['tp'])}</span> | 🛑 <b>손절가(SL):</b> <span style="color:#dc2626; font-weight:700;">{fmt_price(row['sl'])}</span><br>
-                                    ⚖️ <b>손익비:</b> 1 : {row['rr_ratio']:.2f}<br>
-                                    💰 <b>권장 진입 규모:</b> <span style="color:#2563eb; font-weight:700;">${pos_usdt:,.1f} USDT</span> (리스크: ${risk_usdt:,.1f})
-                                </div>
+                        st.markdown(f"""
+                        <div class="card-agg-long">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div><span class="badge-long">🟢 LONG</span> &nbsp; <b style="font-size: 18px; color: #0f172a;">{row['symbol']}</b></div>
+                                <span class="badge-score">최근 OOS 승률: {row['oos_win_rate']:.1f}%</span>
                             </div>
-                        """)
-                        st.markdown(card_html, unsafe_allow_html=True)
+                            <div class="tpsl-box">
+                                ⚙️ <b>1달 최적화 파라미터:</b> <span style="color:#2563eb; font-weight:700;">{row['opt_param']}</span><br>
+                                💵 현재가: <b>{fmt_price(row['price'])}</b> | 📊 Profit Factor: <b>{row['profit_factor']:.2f}</b><br>
+                                🎯 <b>목표가(TP):</b> <span style="color:#059669; font-weight:700;">{fmt_price(row['tp'])}</span> | 🛑 <b>손절가(SL):</b> <span style="color:#dc2626; font-weight:700;">{fmt_price(row['sl'])}</span><br>
+                                ⚖️ <b>손익비:</b> 1 : {row['rr_ratio']:.2f}<br>
+                                💰 <b>권장 진입 규모:</b> <span style="color:#2563eb; font-weight:700;">${pos_usdt:,.1f} USDT</span> (리스크: ${risk_usdt:,.1f})
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
 
         with tab_short:
             if df_short.empty:
@@ -488,22 +409,21 @@ def main():
                     pos_usdt = risk_usdt / sl_pct if sl_pct > 0 else 0
 
                     with col:
-                        card_html = textwrap.dedent(f"""
-                            <div class="card-agg-short">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <div><span class="badge-short">🔴 SHORT</span> &nbsp; <b style="font-size: 18px; color: #0f172a;">{row['symbol']}</b></div>
-                                    <span class="badge-score">최근 OOS 승률: {row['oos_win_rate']:.1f}%</span>
-                                </div>
-                                <div class="tpsl-box">
-                                    ⚙️ <b>1달 최적화 파라미터:</b> <span style="color:#dc2626; font-weight:700;">{row['opt_param']}</span><br>
-                                    💵 현재가: <b>{fmt_price(row['price'])}</b> | 📊 Profit Factor: <b>{row['profit_factor']:.2f}</b><br>
-                                    🎯 <b>목표가(TP):</b> <span style="color:#059669; font-weight:700;">{fmt_price(row['tp'])}</span> | 🛑 <b>손절가(SL):</b> <span style="color:#dc2626; font-weight:700;">{fmt_price(row['sl'])}</span><br>
-                                    ⚖️ <b>손익비:</b> 1 : {row['rr_ratio']:.2f}<br>
-                                    💰 <b>권장 진입 규모:</b> <span style="color:#2563eb; font-weight:700;">${pos_usdt:,.1f} USDT</span> (리스크: ${risk_usdt:,.1f})
-                                </div>
+                        st.markdown(f"""
+                        <div class="card-agg-short">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div><span class="badge-short">🔴 SHORT</span> &nbsp; <b style="font-size: 18px; color: #0f172a;">{row['symbol']}</b></div>
+                                <span class="badge-score">최근 OOS 승률: {row['oos_win_rate']:.1f}%</span>
                             </div>
-                        """)
-                        st.markdown(card_html, unsafe_allow_html=True)
+                            <div class="tpsl-box">
+                                ⚙️ <b>1달 최적화 파라미터:</b> <span style="color:#dc2626; font-weight:700;">{row['opt_param']}</span><br>
+                                💵 현재가: <b>{fmt_price(row['price'])}</b> | 📊 Profit Factor: <b>{row['profit_factor']:.2f}</b><br>
+                                🎯 <b>목표가(TP):</b> <span style="color:#059669; font-weight:700;">{fmt_price(row['tp'])}</span> | 🛑 <b>손절가(SL):</b> <span style="color:#dc2626; font-weight:700;">{fmt_price(row['sl'])}</span><br>
+                                ⚖️ <b>손익비:</b> 1 : {row['rr_ratio']:.2f}<br>
+                                💰 <b>권장 진입 규모:</b> <span style="color:#2563eb; font-weight:700;">${pos_usdt:,.1f} USDT</span> (리스크: ${risk_usdt:,.1f})
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
